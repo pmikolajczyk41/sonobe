@@ -1,5 +1,7 @@
 //! This module provides a trait and implementations for converting Rust types
 //! to EVM calldata.
+
+use alloy_primitives::U256;
 use ark_ec::{
     pairing::Pairing,
     short_weierstrass::{Affine, Projective, SWCurveConfig},
@@ -8,51 +10,56 @@ use ark_ec::{
 use ark_ff::{BigInteger, Fp, Fp2, Fp2Config, FpConfig, PrimeField};
 use ark_groth16::Proof;
 
-pub trait ToEth {
-    fn to_eth(&self) -> Vec<u8>;
+pub trait Soliditify {
+    type Output;
+    fn soliditify(&self) -> Self::Output;
 }
 
-impl<T: ToEth> ToEth for [T] {
-    fn to_eth(&self) -> Vec<u8> {
-        self.iter().flat_map(ToEth::to_eth).collect()
+impl<T: Soliditify> Soliditify for [T] {
+    type Output = Vec<T::Output>;
+    fn soliditify(&self) -> Self::Output {
+        self.iter().map(Soliditify::soliditify).collect()
     }
 }
 
-impl ToEth for u8 {
-    fn to_eth(&self) -> Vec<u8> {
-        vec![*self]
+impl<P: FpConfig<4>> Soliditify for Fp<P, 4> {
+    type Output = U256;
+    fn soliditify(&self) -> Self::Output {
+        let limbs = self.into_bigint().0;
+        U256::from_limbs(limbs)
     }
 }
 
-impl<P: FpConfig<N>, const N: usize> ToEth for Fp<P, N> {
-    fn to_eth(&self) -> Vec<u8> {
-        self.into_bigint().to_bytes_be()
+impl<P: Fp2Config<Fp: Soliditify>> Soliditify for Fp2<P> {
+    type Output = [U256; 2];
+    fn soliditify(&self) -> Self::Output {
+        [self.c1.soliditify(), self.c0.soliditify()]
     }
 }
 
-impl<P: Fp2Config<Fp: ToEth>> ToEth for Fp2<P> {
-    fn to_eth(&self) -> Vec<u8> {
-        [self.c1.to_eth(), self.c0.to_eth()].concat()
-    }
-}
-
-impl<P: SWCurveConfig<BaseField: ToEth>> ToEth for Affine<P> {
-    fn to_eth(&self) -> Vec<u8> {
+impl<P: SWCurveConfig<BaseField: Soliditify>> Soliditify for Affine<P> {
+    type Output = [U256; 2];
+    fn soliditify(&self) -> Self::Output {
         // the encoding of the additive identity is [0, 0] on the EVM
         let (x, y) = self.xy().unwrap_or_default();
-
-        [x.to_eth(), y.to_eth()].concat()
+        [x.soliditify(), y.soliditify()]
     }
 }
 
-impl<P: SWCurveConfig<BaseField: ToEth>> ToEth for Projective<P> {
-    fn to_eth(&self) -> Vec<u8> {
-        self.into_affine().to_eth()
+impl<P: SWCurveConfig<BaseField: Soliditify>> Soliditify for Projective<P> {
+    type Output = [U256; 2];
+    fn soliditify(&self) -> Self::Output {
+        self.into_affine().soliditify()
     }
 }
 
-impl<E: Pairing<G1Affine: ToEth, G2Affine: ToEth>> ToEth for Proof<E> {
-    fn to_eth(&self) -> Vec<u8> {
-        [self.a.to_eth(), self.b.to_eth(), self.c.to_eth()].concat()
+impl<E: Pairing<G1Affine: Soliditify, G2Affine: Soliditify>> Soliditify for Proof<E> {
+    type Output = [[U256; 2]; 3];
+    fn soliditify(&self) -> Self::Output {
+        [
+            self.a.soliditify(),
+            self.b.soliditify(),
+            self.c.soliditify(),
+        ]
     }
 }
