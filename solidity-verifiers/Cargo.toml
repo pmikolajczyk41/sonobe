@@ -6,6 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-groth16 = { workspace = true }

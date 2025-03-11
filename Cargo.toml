@@ -18,6 +18,8 @@ repository = "https://github.com/privacy-scaling-explorations/sonobe/"
 
 [workspace.dependencies]
 acvm = { git = "https://github.com/winderica/noir", rev = "fc9e99", default-features = false } # "arkworks-next" branch
+alloy-primitives = { version = "0.8.22" }
+alloy-sol-types = { version = "0.8.22" }
 askama = { version = "0.12.0", default-features = false }
 clap = { version = "4.4" }
 clap-verbosity-flag = { version = "2.1" }
