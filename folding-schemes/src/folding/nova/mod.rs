@@ -14,6 +14,7 @@ use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Valid};
 use ark_std::{cmp::max, fmt::Debug, marker::PhantomData, rand::RngCore, One, UniformRand, Zero};
 
+
 use crate::folding::{circuits::CF1, traits::Dummy};
 use crate::frontend::FCircuit;
 use crate::transcript::{poseidon::poseidon_canonical_config, Transcript};
@@ -364,12 +365,41 @@ where
         mut writer: W,
         compress: ark_serialize::Compress,
     ) -> Result<(), ark_serialize::SerializationError> {
+        self.r1cs.serialize_with_mode(&mut writer, compress)?;
+        self.cf_r1cs.serialize_with_mode(&mut writer, compress)?;
         self.cs_vp.serialize_with_mode(&mut writer, compress)?;
         self.cf_cs_vp.serialize_with_mode(&mut writer, compress)
     }
 
     fn serialized_size(&self, compress: ark_serialize::Compress) -> usize {
-        self.cs_vp.serialized_size(compress) + self.cf_cs_vp.serialized_size(compress)
+        self.r1cs.serialized_size(compress) + self.cf_r1cs.serialized_size(compress) +
+            self.cs_vp.serialized_size(compress) + self.cf_cs_vp.serialized_size(compress)
+    }
+}
+
+impl<C1, C2, CS1, CS2, const H: bool> CanonicalDeserialize for VerifierParams<C1, C2, CS1, CS2, H>
+where
+    C1: Curve,
+    C2: Curve,
+    CS1: CommitmentScheme<C1, H>,
+    CS2: CommitmentScheme<C2, H>,
+{
+    fn deserialize_with_mode<R: std::io::prelude::Read>(
+        mut reader: R,
+        compress: ark_serialize::Compress,
+        validate: ark_serialize::Validate,
+    ) -> Result<Self, ark_serialize::SerializationError> {
+        let r1cs = R1CS::<C1::ScalarField>::deserialize_with_mode(&mut reader, compress, validate)?;
+        let cf_r1cs = R1CS::<C2::ScalarField>::deserialize_with_mode(&mut reader, compress, validate)?;
+        let cs_vp = CS1::VerifierParams::deserialize_with_mode(&mut reader, compress, validate)?;
+        let cf_cs_vp = CS2::VerifierParams::deserialize_with_mode(&mut reader, compress, validate)?;
+        Ok(VerifierParams {
+            poseidon_config: poseidon_canonical_config::<C1::ScalarField>(),
+            r1cs,
+            cf_r1cs,
+            cs_vp,
+            cf_cs_vp,
+        })
     }
 }
 
